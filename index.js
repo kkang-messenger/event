@@ -1,14 +1,15 @@
-import {styleMessageTimestamps,timestampNodes,initializeThoughtCards,prepareRawThoughtCards} from './message-presentation.js?v=3.5.52';
-import {classifyMessengerPreset,createPresetGuard} from './preset-guard.js?v=3.5.52';
-import {choiceHost,placeChoicePanel,revealDirectInput,setChoiceRetryLoading} from './choice-ui.js?v=3.5.52';
-import {updateViewportLayout,watchViewportLayout,viewportBox} from './layout.js?v=3.5.52';
-import {KEY,hash,messageKey,messageRole,hasUserContent,freshMeta,derive,canSuggest,containsThought,shouldNotifyThought,inferPhoneType,inferDrinkingStart,inferDrinkingEnd,narrativeOpportunity,runtimePrompt,refreshRequestState,validScenarioTime,splitNarrativeChoices,normalizeKoreanSilence,normalizeThoughtSpacing,NARRATIVE_CONTINUE_LABEL} from './core.js?v=3.5.52';
-import {CALL_END_LABEL,CALL_END_CONTROL,splitCallChoices,resolveCallState,inferCallPhase,callChoicesFor,validCallChoiceRecord,callChoicesInstruction} from './call-choices.js?v=3.5.52';
-import {createScenarioClock,recordScenarioTimestamp,resolveScenarioTime,advanceScenarioTime,randomScenarioTime} from './scenario-clock.js?v=3.5.52';
-import {watchBackgroundControls} from './theme-controls.js?v=3.5.52';
-import {buildChoiceSuggestionPrompt,parseChoiceSuggestions,parseGeneratedChoiceSuggestions,readChoiceUserContext} from './choice-suggestions.js?v=3.5.52';
-import {choiceSourceText,resolveOutputLanguage,localizedControlChoice} from './choice-language.js?v=3.5.52';
-import {detectPhoneScreen} from './phone-detection.js?v=3.5.52';
+import {styleMessageTimestamps,timestampNodes,initializeThoughtCards,prepareRawThoughtCards} from './message-presentation.js?v=3.5.54';
+import {classifyMessengerPreset,createPresetGuard} from './preset-guard.js?v=3.5.54';
+import {choiceHost,placeChoicePanel,revealDirectInput,setChoiceRetryLoading} from './choice-ui.js?v=3.5.54';
+import {updateViewportLayout,watchViewportLayout,viewportBox} from './layout.js?v=3.5.54';
+import {KEY,hash,messageKey,messageRole,hasUserContent,freshMeta,derive,canSuggest,containsThought,shouldNotifyThought,inferPhoneType,inferDrinkingStart,inferDrinkingEnd,narrativeOpportunity,runtimePrompt,refreshRequestState,validScenarioTime,splitNarrativeChoices,normalizeKoreanSilence,normalizeThoughtSpacing,NARRATIVE_CONTINUE_LABEL} from './core.js?v=3.5.54';
+import {CALL_END_LABEL,CALL_END_CONTROL,splitCallChoices,resolveCallState,inferCallPhase,callChoicesFor,validCallChoiceRecord,callChoicesInstruction} from './call-choices.js?v=3.5.54';
+import {createScenarioClock,recordScenarioTimestamp,resolveScenarioTime,advanceScenarioTime,randomScenarioTime} from './scenario-clock.js?v=3.5.54';
+import {watchBackgroundControls} from './theme-controls.js?v=3.5.54';
+import {buildChoiceSuggestionPrompt,parseChoiceSuggestions,parseGeneratedChoiceSuggestions,readChoiceUserContext} from './choice-suggestions.js?v=3.5.54';
+import {choiceSourceText,resolveOutputLanguage,localizedControlChoice} from './choice-language.js?v=3.5.54';
+import {detectPhoneScreen} from './phone-detection.js?v=3.5.54';
+import {highlightMessageText} from './text-highlight.js?v=3.5.54';
 
 const ctx=()=>SillyTavern.getContext();
 const DEFAULT_SETTINGS={enabled:true,thinkingMode:'moments',timeMode:'realtime',autoDrinking:true,narrativeChoices:true,theme:'white',loadingStyle:'text',outputLanguage:'auto'};
@@ -303,6 +304,7 @@ function sync(){
     const themeSelect=document.querySelector('#me35-theme');
     if(themeSelect)themeSelect.value=preferences().theme;
     const c=ctx(),settings=preferences(),current=effectiveMeta(),state=derive(current,c.chat??[]),usable=active();
+    document.documentElement.dataset.me35Highlights=usable?'on':'off';
     ctx().setExtensionPrompt(KEY,usable?runtimePrompt(current,ctx().chat):'',1,0,false,0);
     document.documentElement.classList.remove('me35-hide-thoughts');
     const menuToggle=document.querySelector('#me35-menu-toggle');
@@ -1053,7 +1055,7 @@ function latestNarrativeChoices(){
     return {index,key,language,personaKey,ready,options:ready?stored.options:[]};
 }
 function latestCallChoices(){
-    if(!active()||!preferences().narrativeChoices||presetFlag(PROMPT_IDS.phone)!==true)return null;
+    if(!active()||!preferences().narrativeChoices||presetFlag(PROMPT_IDS.phone)!==true||choiceDispatch?.kind==='call-end')return null;
     const chat=ctx().chat??[],call=ongoingCallState();
     if(!call.active&&call.phase!=='incoming')return null;
     let index=chat.length-1;
@@ -1124,12 +1126,13 @@ async function dispatchCallChoice(index,key,choiceIndex){
     const restoreDraft=prepareChoiceDraft(textarea,hangup?'':`[통화 선택] ${choiceSourceText(state.options[choiceIndex],state.language)}`,id);
     token.restoreDraft=restoreDraft;sync();renderAll();
     try{
-        if(hangup)await c.generate('normal',{automatic_trigger:true});
-        else await c.generate('normal');
-        if(hangup&&id===identity()&&choiceDispatch===token){
+        if(hangup){
             const data=meta(true);data.closedCalls??={};data.closedCalls[state.sessionKey]=true;
             await persist();
+            renderAll();
+            await c.generate('normal',{automatic_trigger:true});
         }
+        else await c.generate('normal');
     }finally{
         restoreDraft();
         if(choiceDispatch===token)choiceDispatch=null;
@@ -1161,6 +1164,7 @@ function renderChoiceDock(state){
     panel.setAttribute('role','group');panel.setAttribute('aria-label',isCall?'통화 응답 선택':'유저 행동 및 대사 선택');
     const heading=el('div','','me35-choices-heading');
     heading.append(el('div',isCall?'통화 응답 선택':'내 행동·대사 선택','me35-choices-title'));
+    const actions=el('div','','me35-choices-actions');heading.append(actions);
     panel.append(heading);
     panel.append(el('small','선택하거나 직접 입력해 이어갈 수 있습니다.','me35-choices-hint'));
     if(state.ready){
@@ -1190,13 +1194,21 @@ function renderChoiceDock(state){
         suggestionRefreshes.add(requestKey);
         suggestionAttempts.delete(requestKey);
         queueChoiceSuggestions();
-    });retry.classList.add('me35-choice-retry');retry.disabled=disabled;heading.append(retry);
+    });retry.classList.add('me35-choice-retry');retry.disabled=disabled;actions.append(retry);
+    if(isCall){
+        const hangup=button('통화 끊기',()=>dispatchCallChoice(state.index,state.key,3));
+        hangup.classList.add('me35-choice-retry','me35-choice-hangup');hangup.disabled=disabled;
+        hangup.setAttribute('aria-label','통화 모드를 종료하고 통화를 끊기');
+        actions.append(hangup);
+    }
     setChoiceRetryLoading(panel,loading,disabled||Boolean(suggestionJob));
     placeChoicePanel(panel,host,preservedScroll);
     updateViewportLayout();
 }
 function renderAll(){
     const c=ctx(),data=meta(),mode=readThoughtPromptMode();
+    const usable=active();
+    document.documentElement.dataset.me35Highlights=usable?'on':'off';
     const choiceState=latestCallChoices()??latestNarrativeChoices();
     for(const stale of document.querySelectorAll('#chat .me35-choices:not(#me35-choice-dock)'))stale.remove();
     renderChoiceDock(choiceState);
@@ -1204,10 +1216,12 @@ function renderAll(){
         const index=Number(block.getAttribute('mesid')),message=c.chat[index];
         if(!message)continue;
         const key=messageKey(message,index),body=block.querySelector('.mes_text');
-        if(!body||messageRole(message)!=='character')continue;
+        if(!body)continue;
+        highlightMessageText(body,usable);
+        if(messageRole(message)!=='character')continue;
         // Display-only repair also covers existing messages and older ST versions.
-        if(active()){styleMessageTimestamps(body);repairThoughtBubbleLayout(body);normalizeShownTimestamp(body);initializeThoughtCards(thoughtCards(body));}
-        if(!active()){
+        if(usable){styleMessageTimestamps(body);repairThoughtBubbleLayout(body);normalizeShownTimestamp(body);initializeThoughtCards(thoughtCards(body));}
+        if(!usable){
             for(const details of thoughtCards(body))details.hidden=false;
             for(const timestamp of body.querySelectorAll('[data-me35-hidden-timestamp]'))timestamp.removeAttribute('data-me35-hidden-timestamp');
             continue;

@@ -3,9 +3,9 @@
   "loading_order": 90,
   "requires": [],
   "optional": [],
-  "js": "entry-3.5.52.js",
-  "css": "style-3.5.52.css",
+  "js": "entry-3.5.54.js",
+  "css": "style-3.5.54.css",
   "author": "Messenger 3.5 contributors",
-  "version": "3.5.52",
+  "version": "3.5.54",
   "auto_update": false
 }
