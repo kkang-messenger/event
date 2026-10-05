@@ -1,14 +1,14 @@
-import {styleMessageTimestamps,timestampNodes,initializeThoughtCards,prepareRawThoughtCards} from './message-presentation.js?v=3.5.62';
-import {classifyMessengerPreset,createPresetGuard} from './preset-guard.js?v=3.5.62';
-import {choiceHost,placeChoicePanel,revealDirectInput,setChoiceRetryLoading} from './choice-ui.js?v=3.5.62';
-import {updateViewportLayout,watchViewportLayout,viewportBox} from './layout.js?v=3.5.62';
-import {KEY,hash,messageKey,messageRole,hasUserContent,freshMeta,derive,canSuggest,containsThought,shouldNotifyThought,inferPhoneType,inferDrinkingStart,inferDrinkingEnd,narrativeOpportunity,runtimePrompt,refreshRequestState,validScenarioTime,splitNarrativeChoices,normalizeKoreanSilence,normalizeThoughtSpacing,NARRATIVE_CONTINUE_LABEL} from './core.js?v=3.5.62';
-import {CALL_END_LABEL,CALL_END_CONTROL,splitCallChoices,resolveCallState,inferCallPhase,callChoicesFor,validCallChoiceRecord,callChoicesInstruction} from './call-choices.js?v=3.5.62';
-import {createScenarioClock,recordScenarioTimestamp,resolveScenarioTime,advanceScenarioTime,randomScenarioTime} from './scenario-clock.js?v=3.5.62';
-import {watchBackgroundControls} from './theme-controls.js?v=3.5.62';
-import {buildChoiceSuggestionPrompt,parseChoiceSuggestions,parseGeneratedChoiceSuggestions,readChoiceUserContext} from './choice-suggestions.js?v=3.5.62';
-import {choiceSourceText,resolveOutputLanguage,localizedControlChoice} from './choice-language.js?v=3.5.62';
-import {detectPhoneScreen} from './phone-detection.js?v=3.5.62';
+import {styleMessageTimestamps,timestampNodes,initializeThoughtCards,prepareRawThoughtCards} from './message-presentation.js?v=3.5.63';
+import {classifyMessengerPreset,createPresetGuard} from './preset-guard.js?v=3.5.63';
+import {choiceHost,placeChoicePanel,revealDirectInput,setChoiceRetryLoading} from './choice-ui.js?v=3.5.63';
+import {updateViewportLayout,watchViewportLayout,viewportBox} from './layout.js?v=3.5.63';
+import {KEY,hash,messageKey,messageRole,hasUserContent,freshMeta,derive,canSuggest,containsThought,shouldNotifyThought,inferPhoneType,inferDrinkingStart,inferDrinkingEnd,narrativeOpportunity,runtimePrompt,refreshRequestState,validScenarioTime,splitNarrativeChoices,normalizeKoreanSilence,normalizeThoughtSpacing,NARRATIVE_CONTINUE_LABEL} from './core.js?v=3.5.63';
+import {CALL_END_LABEL,CALL_END_CONTROL,splitCallChoices,resolveCallState,inferCallPhase,callChoicesFor,validCallChoiceRecord,callChoicesInstruction} from './call-choices.js?v=3.5.63';
+import {createScenarioClock,recordScenarioTimestamp,resolveScenarioTime,advanceScenarioTime,randomScenarioTime} from './scenario-clock.js?v=3.5.63';
+import {watchBackgroundControls} from './theme-controls.js?v=3.5.63';
+import {buildChoiceSuggestionPrompt,parseChoiceSuggestions,parseGeneratedChoiceSuggestions,readChoiceUserContext} from './choice-suggestions.js?v=3.5.63';
+import {choiceSourceText,resolveOutputLanguage,localizedControlChoice} from './choice-language.js?v=3.5.63';
+import {detectPhoneScreen} from './phone-detection.js?v=3.5.63';
 
 const ctx=()=>SillyTavern.getContext();
 const DEFAULT_SETTINGS={enabled:true,thinkingMode:'moments',timeMode:'realtime',autoDrinking:true,narrativeChoices:true,theme:'white',loadingStyle:'text',outputLanguage:'auto'};
@@ -184,6 +184,44 @@ function ongoingCallState(){
     const state=resolveCallState(ctx().chat??[]);
     if(state.sourceKey&&meta().closedCalls?.[state.sourceKey])return {...state,active:false,phase:'ended'};
     return state;
+}
+function callControlEndedAfter(chat,index){
+    for(let i=index+1;i<chat.length;i++){
+        const message=chat[i],raw=String(message?.mes??'');
+        if(messageRole(message)==='user'&&/\[통화\s*종료\]/u.test(raw))return true;
+        if(inferCallPhase(raw)==='ended')return true;
+    }
+    return false;
+}
+function activeCallControlSession(){
+    const chat=ctx().chat??[],data=meta(),resolved=ongoingCallState(),candidates=[];
+    const add=(sourceKey,originIndex,direction)=>{
+        if(!sourceKey||!Number.isInteger(originIndex)||originIndex<0||originIndex>=chat.length)return;
+        if(data.closedCalls?.[sourceKey]||callControlEndedAfter(chat,originIndex))return;
+        candidates.push({sourceKey,originIndex,direction});
+    };
+    if((resolved.active||resolved.phase==='incoming')&&resolved.sourceKey)
+        add(resolved.sourceKey,resolved.originIndex,resolved.direction);
+    const stored=data.callModeSession;
+    const storedIndex=stored?.sourceKey?validSourceIndex(stored.sourceKey,chat):-1;
+    if(storedIndex>=0)add(stored.sourceKey,storedIndex,stored.direction);
+    for(let index=0;index<chat.length;index++){
+        const message=chat[index],role=messageRole(message),raw=String(message?.mes??'');
+        if(role==='user'&&/(?:📞\s*)?\[발신\s*통화\s*:[^\]\n]*에게\s*전화를\s*건다\s*\]/u.test(raw)){
+            const sameCall=resolved.sourceKey&&resolved.originIndex===index&&(resolved.active||resolved.phase==='incoming');
+            add(sameCall?resolved.sourceKey:messageKey(message,index),sameCall?resolved.originIndex:index,'outgoing');
+        }else if(role==='character'){
+            const screen=detectPhoneScreen(raw);
+            if(screen.type==='call'&&screen.phase!=='ended'){
+                const sameCall=resolved.sourceKey&&resolved.originIndex<=index&&(resolved.active||resolved.phase==='incoming');
+                const sameStored=storedIndex>=0&&storedIndex<=index&&!callControlEndedAfter(chat,storedIndex);
+                const source=sameCall?resolved: sameStored?stored:null;
+                add(source?.sourceKey??messageKey(message,index),source?.originIndex??index,source?.direction??screen.direction??'incoming');
+            }
+        }
+    }
+    candidates.sort((a,b)=>b.originIndex-a.originIndex);
+    return candidates[0]??null;
 }
 function ensureCallClock(){
     if(readTimePromptMode()!=='shown')return;
@@ -986,6 +1024,22 @@ async function processMessage(index,generatedMode,generatedTimeMode){
     const raw=String(message.mes??'');
     const screen=detectPhoneScreen(raw,{callExpected:ongoingCallState().active});
     const phone=screen.type,hasThought=containsThought(raw);
+    const callPhase=inferCallPhase(raw);
+    if(phone==='call'&&callPhase!=='ended'&&screen.phase!=='ended'){
+        const currentCall=ongoingCallState();
+        const storedIndex=data.callModeSession?.sourceKey?validSourceIndex(data.callModeSession.sourceKey,c.chat):-1;
+        const storedIsActive=storedIndex>=0&&!data.closedCalls?.[data.callModeSession.sourceKey]
+            &&!callControlEndedAfter(c.chat,storedIndex);
+        const newIncoming=screen.phase==='incoming'&&currentCall.phase==='ended';
+        const sessionKey=(currentCall.active||currentCall.phase==='incoming')&&currentCall.sourceKey
+            ?currentCall.sourceKey:newIncoming?key:storedIsActive?data.callModeSession.sourceKey:key;
+        const originIndex=(currentCall.active||currentCall.phase==='incoming')&&currentCall.sourceKey
+            ?currentCall.originIndex:newIncoming?index:storedIsActive?storedIndex:index;
+        const alreadyClosed=data.closedCalls?.[sessionKey]
+            ||(currentCall.sourceKey&&data.closedCalls?.[currentCall.sourceKey]&&!newIncoming);
+        if(!alreadyClosed)data.callModeSession={sourceKey:sessionKey,originIndex,direction:newIncoming?'incoming':currentCall.direction??screen.direction??'incoming'};
+        else delete data.callModeSession;
+    }else if(callPhase==='ended')delete data.callModeSession;
     const state=derive(data,c.chat);
     data.seen[key]=true;data.modes[key]=generatedMode??state.mode;
     await persist();renderAll();
@@ -993,7 +1047,7 @@ async function processMessage(index,generatedMode,generatedTimeMode){
     const outgoingCall=phone==='call'&&(screen.direction==='outgoing'||ongoingCallState().direction==='outgoing');
     const phoneNotice={
         screenshot:['화면 캡처가 도착했습니다','캐릭터가 화면을 캡쳐해서 보냈습니다.'],
-        call:inferCallPhase(raw)==='ended'?null:outgoingCall?['캐릭터가 전화를 받았습니다.','']:['캐릭터가 전화를 걸어옵니다',''],
+        call:callPhase==='ended'?null:outgoingCall?['캐릭터가 전화를 받았습니다.','']:['캐릭터가 전화를 걸어옵니다',''],
         gift:['선물이 도착했습니다','캐릭터가 선물을 보냈습니다.'],
         transfer:['송금 알림','캐릭터가 송금했습니다.'],
     }[phone];
@@ -1098,21 +1152,16 @@ function latestCallChoices(){
 }
 function latestCallControlState(){
     if(!modeControlsEnabled()||choiceDispatch?.kind==='call-end')return null;
-    const chat=ctx().chat??[],call=ongoingCallState();
+    const chat=ctx().chat??[],session=activeCallControlSession();
+    if(!session)return null;
     let index=chat.length-1;
-    while(index>=0&&messageRole(chat[index])!=='character')index--;
-    if(index<0&&Number.isInteger(call.originIndex))index=call.originIndex;
+    while(index>=session.originIndex&&messageRole(chat[index])!=='character')index--;
+    if(index<session.originIndex)index=session.originIndex;
     const message=chat[index];
     if(index<0||!message||messageRole(message)==='system'||!String(message.mes??'').trim())return null;
     const screen=messageRole(message)==='character'?detectPhoneScreen(message.mes):null;
-    const screenActive=screen?.type==='call'&&screen.phase!=='ended';
-    const stateActive=call.active||call.phase==='incoming';
-    // If the latest visible phone screen itself is still active, trust that
-    // screen even when the history resolver disagrees about its phase.
-    const callActive=stateActive||screenActive;
-    const key=messageKey(message,index),sessionKey=call.sourceKey??key;
-    if(!callActive||meta().closedCalls?.[sessionKey])return null;
-    return {kind:'call',index,key,sessionKey,phase:call.phase??screen?.phase};
+    const key=messageKey(message,index);
+    return {kind:'call',index,key,sessionKey:session.sourceKey,phase:ongoingCallState().phase??screen?.phase};
 }
 function prepareChoiceDraft(textarea,payload,id,onCaptured=()=>{}){
     const draft=textarea.value;
@@ -1180,6 +1229,12 @@ async function dispatchCallChoice(index,key,choiceIndex){
     try{
         if(hangup){
             const data=meta(true);data.closedCalls??={};data.closedCalls[state.sessionKey]=true;
+            const current=ongoingCallState();
+            if(current.sourceKey)data.closedCalls[current.sourceKey]=true;
+            if(data.callModeSession?.sourceKey){
+                data.closedCalls[data.callModeSession.sourceKey]=true;
+                delete data.callModeSession;
+            }
             await persist();
             renderAll();
             await c.generate('normal');
@@ -1432,7 +1487,7 @@ async function init(){
     on('GENERATION_STARTED',async(type,options,dryRun)=>{
         if(!dryRun&&!['quiet','impersonate'].includes(type))await maybeShowTimeNotice();
         generation={id:identity(),type,dryRun,mode:derive(effectiveMeta(),ctx().chat??[]).mode,timeMode:readTimePromptMode(),before:(ctx().chat??[]).map(messageKey)};
-        sync();
+        sync();queueRender();
     });
     on('GENERATION_AFTER_COMMANDS',async(type,options,dryRun)=>{
         if(dryRun||['quiet','impersonate'].includes(type)){stopLoading();sync();return;}
