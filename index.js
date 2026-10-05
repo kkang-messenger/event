@@ -1,14 +1,14 @@
-import {styleMessageTimestamps,timestampNodes,initializeThoughtCards,prepareRawThoughtCards} from './message-presentation.js?v=3.5.51';
-import {classifyMessengerPreset,createPresetGuard} from './preset-guard.js?v=3.5.51';
-import {choiceHost,placeChoicePanel,revealDirectInput,setChoiceRetryLoading} from './choice-ui.js?v=3.5.51';
-import {updateViewportLayout,watchViewportLayout,viewportBox} from './layout.js?v=3.5.51';
-import {KEY,hash,messageKey,messageRole,hasUserContent,freshMeta,derive,canSuggest,containsThought,shouldNotifyThought,inferPhoneType,inferDrinkingStart,inferDrinkingEnd,narrativeOpportunity,runtimePrompt,refreshRequestState,validScenarioTime,splitNarrativeChoices,normalizeKoreanSilence,normalizeThoughtSpacing,NARRATIVE_CONTINUE_LABEL} from './core.js?v=3.5.51';
-import {CALL_END_LABEL,CALL_END_CONTROL,splitCallChoices,resolveCallState,inferCallPhase,callChoicesFor,validCallChoiceRecord,callChoicesInstruction} from './call-choices.js?v=3.5.51';
-import {createScenarioClock,recordScenarioTimestamp,resolveScenarioTime,advanceScenarioTime,randomScenarioTime} from './scenario-clock.js?v=3.5.51';
-import {watchBackgroundControls} from './theme-controls.js?v=3.5.51';
-import {buildChoiceSuggestionPrompt,parseChoiceSuggestions,readChoiceUserContext} from './choice-suggestions.js?v=3.5.51';
-import {choiceSourceText,resolveOutputLanguage,localizedControlChoice} from './choice-language.js?v=3.5.51';
-import {detectPhoneScreen} from './phone-detection.js?v=3.5.51';
+import {styleMessageTimestamps,timestampNodes,initializeThoughtCards,prepareRawThoughtCards} from './message-presentation.js?v=3.5.52';
+import {classifyMessengerPreset,createPresetGuard} from './preset-guard.js?v=3.5.52';
+import {choiceHost,placeChoicePanel,revealDirectInput,setChoiceRetryLoading} from './choice-ui.js?v=3.5.52';
+import {updateViewportLayout,watchViewportLayout,viewportBox} from './layout.js?v=3.5.52';
+import {KEY,hash,messageKey,messageRole,hasUserContent,freshMeta,derive,canSuggest,containsThought,shouldNotifyThought,inferPhoneType,inferDrinkingStart,inferDrinkingEnd,narrativeOpportunity,runtimePrompt,refreshRequestState,validScenarioTime,splitNarrativeChoices,normalizeKoreanSilence,normalizeThoughtSpacing,NARRATIVE_CONTINUE_LABEL} from './core.js?v=3.5.52';
+import {CALL_END_LABEL,CALL_END_CONTROL,splitCallChoices,resolveCallState,inferCallPhase,callChoicesFor,validCallChoiceRecord,callChoicesInstruction} from './call-choices.js?v=3.5.52';
+import {createScenarioClock,recordScenarioTimestamp,resolveScenarioTime,advanceScenarioTime,randomScenarioTime} from './scenario-clock.js?v=3.5.52';
+import {watchBackgroundControls} from './theme-controls.js?v=3.5.52';
+import {buildChoiceSuggestionPrompt,parseChoiceSuggestions,parseGeneratedChoiceSuggestions,readChoiceUserContext} from './choice-suggestions.js?v=3.5.52';
+import {choiceSourceText,resolveOutputLanguage,localizedControlChoice} from './choice-language.js?v=3.5.52';
+import {detectPhoneScreen} from './phone-detection.js?v=3.5.52';
 
 const ctx=()=>SillyTavern.getContext();
 const DEFAULT_SETTINGS={enabled:true,thinkingMode:'moments',timeMode:'realtime',autoDrinking:true,narrativeChoices:true,theme:'white',loadingStyle:'text',outputLanguage:'auto'};
@@ -848,8 +848,8 @@ async function normalizeGeneratedMessage(index,generatedMode){
     const cleanMessage={...message,mes:cleanBody};
     let nextCall=callEnabled?{phase:callState.phase,bodyHash:hash(cleanBody),sourceKey:messageKey(cleanMessage,index),sessionKey:callState.originIndex===index?messageKey(cleanMessage,index):callState.sourceKey,language:choiceLanguage,personaKey,options:callChoicesFor(raw,c.name2,callState,choiceLanguage)}:null;
     const oldCall=message.extra?.me35CallChoices;
-    if(nextChoices&&oldChoices?.bodyHash===nextChoices.bodyHash&&oldChoices.language===choiceLanguage&&oldChoices.personaKey===personaKey&&oldChoices.suggestionsGenerated)nextChoices=oldChoices;
-    if(nextCall&&oldCall?.bodyHash===nextCall.bodyHash&&oldCall.language===choiceLanguage&&oldCall.personaKey===personaKey&&oldCall.suggestionsGenerated)nextCall=oldCall;
+    if(nextChoices&&oldChoices?.bodyHash===nextChoices.bodyHash&&oldChoices.language===choiceLanguage&&oldChoices.personaKey===personaKey&&oldChoices.suggestionsGenerated&&oldChoices.suggestionsVersion===2)nextChoices=oldChoices;
+    if(nextCall&&oldCall?.bodyHash===nextCall.bodyHash&&oldCall.language===choiceLanguage&&oldCall.personaKey===personaKey&&oldCall.suggestionsGenerated&&oldCall.suggestionsVersion===2)nextCall=oldCall;
     const choicesChanged=JSON.stringify(oldChoices??null)!==JSON.stringify(nextChoices)
         ||JSON.stringify(oldCall??null)!==JSON.stringify(nextCall);
     let displayChanged=false;
@@ -965,12 +965,12 @@ async function processMessage(index,generatedMode,generatedTimeMode){
     const outgoingCall=phone==='call'&&(screen.direction==='outgoing'||ongoingCallState().direction==='outgoing');
     const phoneNotice={
         screenshot:['화면 캡처가 도착했습니다','캐릭터가 화면을 캡쳐해서 보냈습니다.'],
-        call:inferCallPhase(raw)==='ended'?null:outgoingCall?['통화 화면이 열렸습니다','캐릭터에게 건 전화의 통화 화면이 도착했습니다.']:['캐릭터가 전화를 걸어옵니다','전화 화면이 도착했습니다.'],
+        call:inferCallPhase(raw)==='ended'?null:outgoingCall?['통화 화면이 열렸습니다','캐릭터에게 건 전화의 통화 화면이 도착했습니다.']:['캐릭터가 전화를 걸어옵니다',''],
         gift:['선물이 도착했습니다','캐릭터가 선물을 보냈습니다.'],
         transfer:['송금 알림','캐릭터가 송금했습니다.'],
     }[phone];
     if(phoneNotice){
-        await modal(phoneNotice[0],phoneNotice[1],[['확인',true,true]],phone==='call'?'☎':'✦');
+        await modal(phoneNotice[0],phoneNotice[1],[['확인',true,true]],phone==='call'?'☎':'✦',phone==='call'&&!phoneNotice[1]?'me35-phone-notice':'');
         if(!guard(id,key))return;
     }
     if(preferences().autoDrinking&&presetFlag(PROMPT_IDS.drinking)!==null&&state.drinking==='sober'&&inferDrinkingStart(raw)){
@@ -1049,7 +1049,8 @@ function latestNarrativeChoices(){
     if(meta().modes?.[key]!=='narrative'||stored?.bodyHash!==hash(String(message.mes??'')))return null;
     if(!Array.isArray(stored.options)||stored.options.length!==4||stored.options[3]!==NARRATIVE_CONTINUE_LABEL
         ||!stored.options.every(option=>typeof option==='string'&&option.trim()&&option.length<=240))return null;
-    return {index,key,language,personaKey,options:stored.suggestionsGenerated&&stored.language===language&&stored.personaKey===personaKey?stored.options:parseChoiceSuggestions(null,'narrative',[],language)};
+    const ready=stored.suggestionsGenerated===true&&stored.suggestionsVersion===2&&stored.language===language&&stored.personaKey===personaKey;
+    return {index,key,language,personaKey,ready,options:ready?stored.options:[]};
 }
 function latestCallChoices(){
     if(!active()||!preferences().narrativeChoices||presetFlag(PROMPT_IDS.phone)!==true)return null;
@@ -1061,8 +1062,9 @@ function latestCallChoices(){
     if(!message||messageRole(message)!=='character'||!String(message.mes??'').trim())return null;
     const valid=validCallChoiceRecord(message,index,record)&&record.sessionKey===call.sourceKey;
     const language=outputLanguage(),personaKey=hash(JSON.stringify(readChoiceUserContext(ctx())));
-    return {kind:'call',index,key:messageKey(message,index),sessionKey:call.sourceKey,phase:call.phase,language,personaKey,
-        options:valid&&record.suggestionsGenerated&&record.language===language&&record.personaKey===personaKey?record.options:callChoicesFor(message.mes,ctx().name2,call,language)};
+    const ready=valid&&record.suggestionsGenerated===true&&record.suggestionsVersion===2&&record.language===language&&record.personaKey===personaKey;
+    return {kind:'call',index,key:messageKey(message,index),sessionKey:call.sourceKey,phase:call.phase,language,personaKey,ready,
+        options:ready?record.options:[]};
 }
 function prepareChoiceDraft(textarea,payload,id,onCaptured=()=>{}){
     const draft=textarea.value;
@@ -1161,14 +1163,20 @@ function renderChoiceDock(state){
     heading.append(el('div',isCall?'통화 응답 선택':'내 행동·대사 선택','me35-choices-title'));
     panel.append(heading);
     panel.append(el('small','선택하거나 직접 입력해 이어갈 수 있습니다.','me35-choices-hint'));
-    for(const [choiceIndex,option] of state.options.slice(0,3).entries()){
-        const choice=el('button','','me35-choice');choice.type='button';choice.disabled=disabled;
-        const choiceLabel=option;
-        choice.append(el('span',String(choiceIndex+1),'me35-choice-number'),el('span',choiceLabel,'me35-choice-label'));
-        choice.addEventListener('click',()=>Promise.resolve(isCall
-            ?dispatchCallChoice(state.index,state.key,choiceIndex)
-            :dispatchNarrativeChoice(state.index,state.key,choiceIndex)).catch(report));
-        panel.append(choice);
+    if(state.ready){
+        for(const [choiceIndex,option] of state.options.slice(0,3).entries()){
+            const choice=el('button','','me35-choice');choice.type='button';choice.disabled=disabled;
+            const choiceLabel=option;
+            choice.append(el('span',String(choiceIndex+1),'me35-choice-number'),el('span',choiceLabel,'me35-choice-label'));
+            choice.addEventListener('click',()=>Promise.resolve(isCall
+                ?dispatchCallChoice(state.index,state.key,choiceIndex)
+                :dispatchNarrativeChoice(state.index,state.key,choiceIndex)).catch(report));
+            panel.append(choice);
+        }
+    }else{
+        const pending=el('div','','me35-choice-pending-space');
+        pending.setAttribute('aria-hidden','true');
+        panel.append(pending);
     }
     const direct=button('직접 입력',focusChoiceInput);
     direct.classList.add('me35-choice','me35-choice-direct');direct.disabled=disabled;
@@ -1224,7 +1232,7 @@ function queueChoiceSuggestions(){
     const previous=state.kind==='call'?c.chat[state.index]?.extra?.me35CallChoices:c.chat[state.index]?.extra?.me35Choices;
     const kind=state.kind??'narrative',language=state.language??outputLanguage();
     const id=identity(),attempt=`${id}|${kind}|${state.key}|${language}${state.personaKey?`|${state.personaKey}`:''}`;
-    if(previous?.suggestionsGenerated&&previous.language===language&&previous.personaKey===state.personaKey&&!suggestionRefreshes.has(attempt)
+    if(previous?.suggestionsGenerated&&previous.suggestionsVersion===2&&previous.language===language&&previous.personaKey===state.personaKey&&!suggestionRefreshes.has(attempt)
         &&(kind!=='call'||(validCallChoiceRecord(c.chat[state.index],state.index,previous)&&previous.sessionKey===state.sessionKey)))return;
     const attempts=suggestionAttempts.get(attempt)??0;
     if(attempts>=2){suggestionRefreshes.delete(attempt);return;}
@@ -1235,6 +1243,8 @@ function queueChoiceSuggestions(){
     Promise.resolve().then(()=>c.generateRaw(request)).then(async result=>{
         const latest=latestCallChoices()??latestNarrativeChoices();
         if(token.epoch!==suggestionEpoch||id!==identity()||busy||!latest||latest.key!==state.key||latest.language!==language||latest.personaKey!==state.personaKey||(latest.kind??'narrative')!==kind){suggestionAttempts.delete(attempt);return;}
+        const generated=parseGeneratedChoiceSuggestions(result,kind,language);
+        if(generated.length!==3)return;
         const message=ctx().chat[state.index];
         // Existing chats may predate choice metadata. Rebuild only extension metadata.
         if(kind==='call'&&(!validCallChoiceRecord(message,state.index,message.extra?.me35CallChoices)||message.extra.me35CallChoices.sessionKey!==latest.sessionKey)){
@@ -1243,9 +1253,10 @@ function queueChoiceSuggestions(){
         }
         const record=kind==='call'?message.extra?.me35CallChoices:message.extra?.me35Choices;
         if(!record||record.bodyHash!==hash(String(message.mes??'')))return;
-        record.options=parseChoiceSuggestions(result,kind,state.options,language);
+        record.options=[...generated,kind==='call'?CALL_END_LABEL:NARRATIVE_CONTINUE_LABEL];
         record.language=language;
         record.personaKey=state.personaKey;
+        record.suggestionsVersion=2;
         record.suggestionsGenerated=true;
         suggestionRefreshes.delete(attempt);
         if(Number.isInteger(message.swipe_id)&&message.swipe_info?.[message.swipe_id])message.swipe_info[message.swipe_id].extra=structuredClone(message.extra);

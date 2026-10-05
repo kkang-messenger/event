@@ -102,11 +102,21 @@ function cleanChoice(value,mode,language='ko'){
     if(text===localizedControlChoice(mode,language)||(language!=='ko'&&!choiceMatchesLanguage(text,language)))return '';
     return text;
 }
-export function parseChoiceSuggestions(raw,kind,fallbackOptions=[],language='ko'){
+export function parseGeneratedChoiceSuggestions(raw,kind,language='ko'){
     const mode=kind==='call'?'call':'narrative',options=[],seen=new Set();
     const parsed=jsonValues(raw);
+    for(const value of Array.isArray(parsed)?parsed:[]){
+        const option=cleanChoice(value,mode,language),key=option.toLocaleLowerCase();
+        if(!option||seen.has(key))continue;
+        seen.add(key);options.push(option);
+        if(options.length===3)break;
+    }
+    return options;
+}
+export function parseChoiceSuggestions(raw,kind,fallbackOptions=[],language='ko'){
+    const mode=kind==='call'?'call':'narrative',options=[],seen=new Set();
     const fallback=Array.isArray(fallbackOptions)?fallbackOptions.slice(0,3):[];
-    for(const value of [...(Array.isArray(parsed)?parsed:[]),...fallback,...localizedChoiceDefaults(mode,language)]){
+    for(const value of [...parseGeneratedChoiceSuggestions(raw,mode,language),...fallback,...localizedChoiceDefaults(mode,language)]){
         const option=cleanChoice(value,mode,language),key=option.toLocaleLowerCase();
         if(!option||seen.has(key))continue;
         seen.add(key);options.push(option);
