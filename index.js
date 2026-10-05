@@ -1,14 +1,14 @@
-import {styleMessageTimestamps,timestampNodes,initializeThoughtCards,prepareRawThoughtCards} from './message-presentation.js?v=3.5.57';
-import {classifyMessengerPreset,createPresetGuard} from './preset-guard.js?v=3.5.57';
-import {choiceHost,placeChoicePanel,revealDirectInput,setChoiceRetryLoading} from './choice-ui.js?v=3.5.57';
-import {updateViewportLayout,watchViewportLayout,viewportBox} from './layout.js?v=3.5.57';
-import {KEY,hash,messageKey,messageRole,hasUserContent,freshMeta,derive,canSuggest,containsThought,shouldNotifyThought,inferPhoneType,inferDrinkingStart,inferDrinkingEnd,narrativeOpportunity,runtimePrompt,refreshRequestState,validScenarioTime,splitNarrativeChoices,normalizeKoreanSilence,normalizeThoughtSpacing,NARRATIVE_CONTINUE_LABEL} from './core.js?v=3.5.57';
-import {CALL_END_LABEL,CALL_END_CONTROL,splitCallChoices,resolveCallState,inferCallPhase,callChoicesFor,validCallChoiceRecord,callChoicesInstruction} from './call-choices.js?v=3.5.57';
-import {createScenarioClock,recordScenarioTimestamp,resolveScenarioTime,advanceScenarioTime,randomScenarioTime} from './scenario-clock.js?v=3.5.57';
-import {watchBackgroundControls} from './theme-controls.js?v=3.5.57';
-import {buildChoiceSuggestionPrompt,parseChoiceSuggestions,parseGeneratedChoiceSuggestions,readChoiceUserContext} from './choice-suggestions.js?v=3.5.57';
-import {choiceSourceText,resolveOutputLanguage,localizedControlChoice} from './choice-language.js?v=3.5.57';
-import {detectPhoneScreen} from './phone-detection.js?v=3.5.57';
+import {styleMessageTimestamps,timestampNodes,initializeThoughtCards,prepareRawThoughtCards} from './message-presentation.js?v=3.5.58';
+import {classifyMessengerPreset,createPresetGuard} from './preset-guard.js?v=3.5.58';
+import {choiceHost,placeChoicePanel,revealDirectInput,setChoiceRetryLoading} from './choice-ui.js?v=3.5.58';
+import {updateViewportLayout,watchViewportLayout,viewportBox} from './layout.js?v=3.5.58';
+import {KEY,hash,messageKey,messageRole,hasUserContent,freshMeta,derive,canSuggest,containsThought,shouldNotifyThought,inferPhoneType,inferDrinkingStart,inferDrinkingEnd,narrativeOpportunity,runtimePrompt,refreshRequestState,validScenarioTime,splitNarrativeChoices,normalizeKoreanSilence,normalizeThoughtSpacing,NARRATIVE_CONTINUE_LABEL} from './core.js?v=3.5.58';
+import {CALL_END_LABEL,CALL_END_CONTROL,splitCallChoices,resolveCallState,inferCallPhase,callChoicesFor,validCallChoiceRecord,callChoicesInstruction} from './call-choices.js?v=3.5.58';
+import {createScenarioClock,recordScenarioTimestamp,resolveScenarioTime,advanceScenarioTime,randomScenarioTime} from './scenario-clock.js?v=3.5.58';
+import {watchBackgroundControls} from './theme-controls.js?v=3.5.58';
+import {buildChoiceSuggestionPrompt,parseChoiceSuggestions,parseGeneratedChoiceSuggestions,readChoiceUserContext} from './choice-suggestions.js?v=3.5.58';
+import {choiceSourceText,resolveOutputLanguage,localizedControlChoice} from './choice-language.js?v=3.5.58';
+import {detectPhoneScreen} from './phone-detection.js?v=3.5.58';
 
 const ctx=()=>SillyTavern.getContext();
 const DEFAULT_SETTINGS={enabled:true,thinkingMode:'moments',timeMode:'realtime',autoDrinking:true,narrativeChoices:true,theme:'white',loadingStyle:'text',outputLanguage:'auto'};
@@ -27,7 +27,7 @@ let promptManager=null;
 let bindViewport=()=>{};
 let busy=false,generation=null,activeDialog=null,settingsDialog=null,renderQueued=false,menuObserver=null,thoughtObserver=null,thoughtRoot=null,choiceDispatch=null;
 let loadingWait=false,loadingWatchdog=null,loadingMonitor=null,loadingSawGenerating=false,loadingStartedAt=0,timeNoticeInFlight=null,lastObservedTimeMode=null;
-let loadingAnchor=null,loadingResizeObserver=null;
+let loadingAnchor=null,loadingResizeObserver=null,modeControlAnchor=null,modeControlResizeObserver=null;
 let suggestionJob=null;
 const suggestionAttempts=new Map();
 const suggestionRefreshes=new Set();
@@ -455,18 +455,27 @@ async function maybeShowTimeNotice(force=false,allowExisting=false){
         return await pending.promise;
     }finally{if(timeNoticeInFlight===pending)timeNoticeInFlight=null;}
 }
+function positionAboveSendForm(element,sendForm,prefix){
+    const rect=sendForm?.getBoundingClientRect();
+    if(!rect||rect.width<=0||rect.height<=0)return false;
+    const viewport=viewportBox(window);
+    element.style.setProperty(`${prefix}-left`,`${Math.min(viewport.left+viewport.width-12,Math.max(viewport.left+12,rect.left+rect.width/2))}px`);
+    element.style.setProperty(`${prefix}-top`,`${Math.max(viewport.top+36,Math.min(rect.top-6,viewport.top+viewport.height-12))}px`);
+    element.style.setProperty(`${prefix}-width`,`${Math.max(1,Math.min(rect.width,viewport.width)-24)}px`);
+    return true;
+}
 function renderLoading(){
     let indicator=document.querySelector('#me35-loading-indicator');
     const style=preferences().loadingStyle;
     if(!active()||!loadingWait||style==='off'){
         loadingResizeObserver?.disconnect();loadingResizeObserver=null;loadingAnchor=null;
-        indicator?.remove();return;
+        indicator?.remove();positionModeControlDock();return;
     }
     const sendForm=document.querySelector('#send_form');
     const rect=sendForm?.getBoundingClientRect();
     if(!sendForm||!rect||rect.width<=0||rect.height<=0){
         loadingResizeObserver?.disconnect();loadingResizeObserver=null;loadingAnchor=null;
-        indicator?.remove();return;
+        indicator?.remove();positionModeControlDock();return;
     }
     if(!indicator){
         indicator=el('div','','me35-loading');indicator.id='me35-loading-indicator';
@@ -481,12 +490,10 @@ function renderLoading(){
         for(let i=0;i<3;i++)dots.append(el('i'));
         indicator.replaceChildren(el('span',label,'me35-loading-label'),dots);
     }
-    const viewport=viewportBox(window);
-    indicator.style.setProperty('--me35-loading-left',`${Math.min(viewport.left+viewport.width-12,Math.max(viewport.left+12,rect.left+rect.width/2))}px`);
-    indicator.style.setProperty('--me35-loading-top',`${Math.max(viewport.top+36,Math.min(rect.top-6,viewport.top+viewport.height-12))}px`);
-    indicator.style.setProperty('--me35-loading-width',`${Math.max(1,Math.min(rect.width,viewport.width)-24)}px`);
+    positionAboveSendForm(indicator,sendForm,'--me35-loading');
     // A viewport overlay cannot end up between newly appended chat messages.
     if(indicator.parentElement!==document.body)document.body.append(indicator);
+    positionModeControlDock();
     if(loadingAnchor!==sendForm){
         loadingResizeObserver?.disconnect();loadingResizeObserver=null;
         loadingAnchor=sendForm;
@@ -1252,30 +1259,52 @@ function modeControlState(){
     if(derive(effectiveMeta(),ctx().chat??[]).mode==='narrative')return {kind:'narrative'};
     return null;
 }
+function positionModeControlDock(){
+    const control=document.querySelector('#me35-mode-control-dock');
+    if(!control){modeControlResizeObserver?.disconnect();modeControlResizeObserver=null;modeControlAnchor=null;return;}
+    const sendForm=document.querySelector('#send_form');
+    if(!sendForm||!positionAboveSendForm(control,sendForm,'--me35-mode-control')){
+        control.style.removeProperty('--me35-mode-control-left');
+        control.style.removeProperty('--me35-mode-control-top');
+        control.style.removeProperty('--me35-mode-control-width');
+        modeControlResizeObserver?.disconnect();modeControlResizeObserver=null;modeControlAnchor=null;
+        return;
+    }
+    const loading=document.querySelector('#me35-loading-indicator');
+    if(loadingWait&&preferences().loadingStyle!=='off'&&loading){
+        const viewport=viewportBox(window),loadingTop=loading.getBoundingClientRect().top;
+        control.style.setProperty('--me35-mode-control-top',`${Math.max(viewport.top+36,loadingTop-8)}px`);
+    }
+    if(modeControlAnchor!==sendForm){
+        modeControlResizeObserver?.disconnect();modeControlResizeObserver=null;
+        modeControlAnchor=sendForm;
+        if(typeof ResizeObserver==='function'){
+            modeControlResizeObserver=new ResizeObserver(()=>positionModeControlDock());
+            modeControlResizeObserver.observe(sendForm);
+        }
+    }
+}
 function renderModeControlDock(){
     const existing=document.querySelector('#me35-mode-control-dock'),state=modeControlState();
-    if(!state){existing?.remove();return;}
+    if(!state){existing?.remove();positionModeControlDock();return;}
     const signature=`${identity()}|${state.kind}|${state.key??''}|${state.sessionKey??''}`;
     const disabled=busy||Boolean(choiceDispatch)||document.body?.dataset.generating==='true';
     if(existing?.dataset.me35Signature===signature){
-        const control=existing.querySelector('button');
-        if(control)control.disabled=disabled;
+        existing.disabled=disabled;
+        positionModeControlDock();
         return;
     }
     existing?.remove();
+    modeControlResizeObserver?.disconnect();modeControlResizeObserver=null;modeControlAnchor=null;
     const isCall=state.kind==='call';
-    const panel=el('div','','me35-mode-control');panel.id='me35-mode-control-dock';
-    panel.dataset.me35Signature=signature;
-    panel.setAttribute('role','group');
-    panel.setAttribute('aria-label',isCall?'통화 모드 제어':'서사 모드 제어');
-    panel.append(el('span',isCall?'통화 모드':'서사 모드','me35-mode-control-label'));
     const control=button(isCall?'통화 끊기':'메신저로 돌아가기',()=>isCall
         ?dispatchCallChoice(state.index,state.key,3)
         :dispatchNarrativeModeReturn());
-    control.classList.add('me35-mode-control-button');control.disabled=disabled;
+    control.id='me35-mode-control-dock';control.dataset.me35Signature=signature;
+    control.classList.add('me35-mode-control','me35-mode-control-button');control.disabled=disabled;
     control.setAttribute('aria-label',isCall?'통화를 종료하기':'메신저 모드로 돌아가기');
-    panel.append(control);
-    document.body.append(panel);
+    document.body.append(control);
+    positionModeControlDock();
 }
 function renderAll(){
     const c=ctx(),data=meta(),mode=readThoughtPromptMode();
@@ -1382,7 +1411,7 @@ async function init(){
         else c.eventSource.on(received,normalizeReceipt);
     }
     registerLayoutHooks();
-    const repositionLoading=()=>{if(loadingWait)renderLoading();};
+    const repositionLoading=()=>{if(loadingWait)renderLoading();positionModeControlDock();};
     window.addEventListener('resize',repositionLoading);
     window.addEventListener('scroll',repositionLoading,true);
     window.visualViewport?.addEventListener('resize',repositionLoading);
