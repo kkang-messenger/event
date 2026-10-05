@@ -1,0 +1,11 @@
+{
+  "display_name": "스마트폰 메신저",
+  "loading_order": 90,
+  "requires": [],
+  "optional": [],
+  "js": "entry-3.5.51.js",
+  "css": "style-3.5.51.css",
+  "author": "Messenger 3.5 contributors",
+  "version": "3.5.51",
+  "auto_update": false
+}
