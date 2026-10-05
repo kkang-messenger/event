@@ -1,15 +1,14 @@
-import {styleMessageTimestamps,timestampNodes,initializeThoughtCards,prepareRawThoughtCards} from './message-presentation.js?v=3.5.54';
-import {classifyMessengerPreset,createPresetGuard} from './preset-guard.js?v=3.5.54';
-import {choiceHost,placeChoicePanel,revealDirectInput,setChoiceRetryLoading} from './choice-ui.js?v=3.5.54';
-import {updateViewportLayout,watchViewportLayout,viewportBox} from './layout.js?v=3.5.54';
-import {KEY,hash,messageKey,messageRole,hasUserContent,freshMeta,derive,canSuggest,containsThought,shouldNotifyThought,inferPhoneType,inferDrinkingStart,inferDrinkingEnd,narrativeOpportunity,runtimePrompt,refreshRequestState,validScenarioTime,splitNarrativeChoices,normalizeKoreanSilence,normalizeThoughtSpacing,NARRATIVE_CONTINUE_LABEL} from './core.js?v=3.5.54';
-import {CALL_END_LABEL,CALL_END_CONTROL,splitCallChoices,resolveCallState,inferCallPhase,callChoicesFor,validCallChoiceRecord,callChoicesInstruction} from './call-choices.js?v=3.5.54';
-import {createScenarioClock,recordScenarioTimestamp,resolveScenarioTime,advanceScenarioTime,randomScenarioTime} from './scenario-clock.js?v=3.5.54';
-import {watchBackgroundControls} from './theme-controls.js?v=3.5.54';
-import {buildChoiceSuggestionPrompt,parseChoiceSuggestions,parseGeneratedChoiceSuggestions,readChoiceUserContext} from './choice-suggestions.js?v=3.5.54';
-import {choiceSourceText,resolveOutputLanguage,localizedControlChoice} from './choice-language.js?v=3.5.54';
-import {detectPhoneScreen} from './phone-detection.js?v=3.5.54';
-import {highlightMessageText} from './text-highlight.js?v=3.5.54';
+import {styleMessageTimestamps,timestampNodes,initializeThoughtCards,prepareRawThoughtCards} from './message-presentation.js?v=3.5.55';
+import {classifyMessengerPreset,createPresetGuard} from './preset-guard.js?v=3.5.55';
+import {choiceHost,placeChoicePanel,revealDirectInput,setChoiceRetryLoading} from './choice-ui.js?v=3.5.55';
+import {updateViewportLayout,watchViewportLayout,viewportBox} from './layout.js?v=3.5.55';
+import {KEY,hash,messageKey,messageRole,hasUserContent,freshMeta,derive,canSuggest,containsThought,shouldNotifyThought,inferPhoneType,inferDrinkingStart,inferDrinkingEnd,narrativeOpportunity,runtimePrompt,refreshRequestState,validScenarioTime,splitNarrativeChoices,normalizeKoreanSilence,normalizeThoughtSpacing,NARRATIVE_CONTINUE_LABEL} from './core.js?v=3.5.55';
+import {CALL_END_LABEL,CALL_END_CONTROL,splitCallChoices,resolveCallState,inferCallPhase,callChoicesFor,validCallChoiceRecord,callChoicesInstruction} from './call-choices.js?v=3.5.55';
+import {createScenarioClock,recordScenarioTimestamp,resolveScenarioTime,advanceScenarioTime,randomScenarioTime} from './scenario-clock.js?v=3.5.55';
+import {watchBackgroundControls} from './theme-controls.js?v=3.5.55';
+import {buildChoiceSuggestionPrompt,parseChoiceSuggestions,parseGeneratedChoiceSuggestions,readChoiceUserContext} from './choice-suggestions.js?v=3.5.55';
+import {choiceSourceText,resolveOutputLanguage,localizedControlChoice} from './choice-language.js?v=3.5.55';
+import {detectPhoneScreen} from './phone-detection.js?v=3.5.55';
 
 const ctx=()=>SillyTavern.getContext();
 const DEFAULT_SETTINGS={enabled:true,thinkingMode:'moments',timeMode:'realtime',autoDrinking:true,narrativeChoices:true,theme:'white',loadingStyle:'text',outputLanguage:'auto'};
@@ -304,7 +303,6 @@ function sync(){
     const themeSelect=document.querySelector('#me35-theme');
     if(themeSelect)themeSelect.value=preferences().theme;
     const c=ctx(),settings=preferences(),current=effectiveMeta(),state=derive(current,c.chat??[]),usable=active();
-    document.documentElement.dataset.me35Highlights=usable?'on':'off';
     ctx().setExtensionPrompt(KEY,usable?runtimePrompt(current,ctx().chat):'',1,0,false,0);
     document.documentElement.classList.remove('me35-hide-thoughts');
     const menuToggle=document.querySelector('#me35-menu-toggle');
@@ -1123,14 +1121,14 @@ async function dispatchCallChoice(index,key,choiceIndex){
     if(typeof c.generate!=='function'||!(textarea instanceof HTMLTextAreaElement))return;
     const id=identity(),hangup=choiceIndex===3;
     const token={id,key,kind:hangup?'call-end':'call'};choiceDispatch=token;
-    const restoreDraft=prepareChoiceDraft(textarea,hangup?'':`[통화 선택] ${choiceSourceText(state.options[choiceIndex],state.language)}`,id);
+    const restoreDraft=prepareChoiceDraft(textarea,hangup?'[통화 종료]':`[통화 선택] ${choiceSourceText(state.options[choiceIndex],state.language)}`,id);
     token.restoreDraft=restoreDraft;sync();renderAll();
     try{
         if(hangup){
             const data=meta(true);data.closedCalls??={};data.closedCalls[state.sessionKey]=true;
             await persist();
             renderAll();
-            await c.generate('normal',{automatic_trigger:true});
+            await c.generate('normal');
         }
         else await c.generate('normal');
     }finally{
@@ -1208,7 +1206,6 @@ function renderChoiceDock(state){
 function renderAll(){
     const c=ctx(),data=meta(),mode=readThoughtPromptMode();
     const usable=active();
-    document.documentElement.dataset.me35Highlights=usable?'on':'off';
     const choiceState=latestCallChoices()??latestNarrativeChoices();
     for(const stale of document.querySelectorAll('#chat .me35-choices:not(#me35-choice-dock)'))stale.remove();
     renderChoiceDock(choiceState);
@@ -1217,7 +1214,6 @@ function renderAll(){
         if(!message)continue;
         const key=messageKey(message,index),body=block.querySelector('.mes_text');
         if(!body)continue;
-        highlightMessageText(body,usable);
         if(messageRole(message)!=='character')continue;
         // Display-only repair also covers existing messages and older ST versions.
         if(usable){styleMessageTimestamps(body);repairThoughtBubbleLayout(body);normalizeShownTimestamp(body);initializeThoughtCards(thoughtCards(body));}
