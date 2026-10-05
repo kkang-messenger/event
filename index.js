@@ -1,14 +1,14 @@
-import {styleMessageTimestamps,timestampNodes,initializeThoughtCards,prepareRawThoughtCards} from './message-presentation.js?v=3.5.61';
-import {classifyMessengerPreset,createPresetGuard} from './preset-guard.js?v=3.5.61';
-import {choiceHost,placeChoicePanel,revealDirectInput,setChoiceRetryLoading} from './choice-ui.js?v=3.5.61';
-import {updateViewportLayout,watchViewportLayout,viewportBox} from './layout.js?v=3.5.61';
-import {KEY,hash,messageKey,messageRole,hasUserContent,freshMeta,derive,canSuggest,containsThought,shouldNotifyThought,inferPhoneType,inferDrinkingStart,inferDrinkingEnd,narrativeOpportunity,runtimePrompt,refreshRequestState,validScenarioTime,splitNarrativeChoices,normalizeKoreanSilence,normalizeThoughtSpacing,NARRATIVE_CONTINUE_LABEL} from './core.js?v=3.5.61';
-import {CALL_END_LABEL,CALL_END_CONTROL,splitCallChoices,resolveCallState,inferCallPhase,callChoicesFor,validCallChoiceRecord,callChoicesInstruction} from './call-choices.js?v=3.5.61';
-import {createScenarioClock,recordScenarioTimestamp,resolveScenarioTime,advanceScenarioTime,randomScenarioTime} from './scenario-clock.js?v=3.5.61';
-import {watchBackgroundControls} from './theme-controls.js?v=3.5.61';
-import {buildChoiceSuggestionPrompt,parseChoiceSuggestions,parseGeneratedChoiceSuggestions,readChoiceUserContext} from './choice-suggestions.js?v=3.5.61';
-import {choiceSourceText,resolveOutputLanguage,localizedControlChoice} from './choice-language.js?v=3.5.61';
-import {detectPhoneScreen} from './phone-detection.js?v=3.5.61';
+import {styleMessageTimestamps,timestampNodes,initializeThoughtCards,prepareRawThoughtCards} from './message-presentation.js?v=3.5.62';
+import {classifyMessengerPreset,createPresetGuard} from './preset-guard.js?v=3.5.62';
+import {choiceHost,placeChoicePanel,revealDirectInput,setChoiceRetryLoading} from './choice-ui.js?v=3.5.62';
+import {updateViewportLayout,watchViewportLayout,viewportBox} from './layout.js?v=3.5.62';
+import {KEY,hash,messageKey,messageRole,hasUserContent,freshMeta,derive,canSuggest,containsThought,shouldNotifyThought,inferPhoneType,inferDrinkingStart,inferDrinkingEnd,narrativeOpportunity,runtimePrompt,refreshRequestState,validScenarioTime,splitNarrativeChoices,normalizeKoreanSilence,normalizeThoughtSpacing,NARRATIVE_CONTINUE_LABEL} from './core.js?v=3.5.62';
+import {CALL_END_LABEL,CALL_END_CONTROL,splitCallChoices,resolveCallState,inferCallPhase,callChoicesFor,validCallChoiceRecord,callChoicesInstruction} from './call-choices.js?v=3.5.62';
+import {createScenarioClock,recordScenarioTimestamp,resolveScenarioTime,advanceScenarioTime,randomScenarioTime} from './scenario-clock.js?v=3.5.62';
+import {watchBackgroundControls} from './theme-controls.js?v=3.5.62';
+import {buildChoiceSuggestionPrompt,parseChoiceSuggestions,parseGeneratedChoiceSuggestions,readChoiceUserContext} from './choice-suggestions.js?v=3.5.62';
+import {choiceSourceText,resolveOutputLanguage,localizedControlChoice} from './choice-language.js?v=3.5.62';
+import {detectPhoneScreen} from './phone-detection.js?v=3.5.62';
 
 const ctx=()=>SillyTavern.getContext();
 const DEFAULT_SETTINGS={enabled:true,thinkingMode:'moments',timeMode:'realtime',autoDrinking:true,narrativeChoices:true,theme:'white',loadingStyle:'text',outputLanguage:'auto'};
@@ -96,6 +96,9 @@ const presetGuard=createPresetGuard({
     onError:report,
 });
 function active(){return available()&&preferences().enabled&&promptCompatibility()==='compatible';}
+// Mode exit controls remain useful even when a prompt compatibility check
+// temporarily disables the extension's prompt hooks.
+function modeControlsEnabled(){return available()&&preferences().enabled;}
 function promptOrder(){
     if(promptManager?.activeCharacter)return promptManager.getPromptOrderForCharacter(promptManager.activeCharacter);
     return ctx().chatCompletionSettings?.prompt_order?.find(item=>String(item.character_id)==='100001')?.order??null;
@@ -1094,7 +1097,7 @@ function latestCallChoices(){
         options:ready?record.options:[]};
 }
 function latestCallControlState(){
-    if(!active()||choiceDispatch?.kind==='call-end')return null;
+    if(!modeControlsEnabled()||choiceDispatch?.kind==='call-end')return null;
     const chat=ctx().chat??[],call=ongoingCallState();
     let index=chat.length-1;
     while(index>=0&&messageRole(chat[index])!=='character')index--;
@@ -1104,7 +1107,9 @@ function latestCallControlState(){
     const screen=messageRole(message)==='character'?detectPhoneScreen(message.mes):null;
     const screenActive=screen?.type==='call'&&screen.phase!=='ended';
     const stateActive=call.active||call.phase==='incoming';
-    const callActive=stateActive||(screenActive&&(call.phase==='idle'||['dialing','connected','incoming'].includes(screen.phase)));
+    // If the latest visible phone screen itself is still active, trust that
+    // screen even when the history resolver disagrees about its phase.
+    const callActive=stateActive||screenActive;
     const key=messageKey(message,index),sessionKey=call.sourceKey??key;
     if(!callActive||meta().closedCalls?.[sessionKey])return null;
     return {kind:'call',index,key,sessionKey,phase:call.phase??screen?.phase};
@@ -1140,7 +1145,7 @@ function focusChoiceInput(){
 async function dispatchNarrativeModeReturn(){
     if(choiceDispatch||busy||document.body?.dataset.generating==='true')return;
     const chat=ctx().chat??[];
-    if(!active()||derive(meta(),chat).mode!=='narrative')return;
+    if(!modeControlsEnabled()||derive(meta(),chat).mode!=='narrative')return;
     await action({mode:'messenger'},lastKey());
 }
 async function dispatchNarrativeChoice(index,key,choiceIndex){
@@ -1258,7 +1263,7 @@ function renderChoiceDock(state){
     updateViewportLayout();
 }
 function modeControlState(){
-    if(!active()||preferences().narrativeChoices)return null;
+    if(!modeControlsEnabled()||preferences().narrativeChoices)return null;
     const call=latestCallControlState();
     if(call)return call;
     if(derive(meta(),ctx().chat??[]).mode==='narrative')return {kind:'narrative'};
