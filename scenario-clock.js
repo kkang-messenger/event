@@ -1,4 +1,4 @@
-import {hasTimestampClass} from './message-presentation.js?v=3.5.58';
+import {hasTimestampClass} from './message-presentation.js?v=3.5.59';
 import {messageKey,messageRole,validScenarioTime} from './core.js';
 
 const htmlTag=/<\/?[a-z][^>"']*(?:(?:"[^"]*"|'[^']*')[^>"']*)*>/gi;

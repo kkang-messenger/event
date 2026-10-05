@@ -1,4 +1,4 @@
-import {normalizeTimestampMarkup} from './message-presentation.js?v=3.5.58';
+import {normalizeTimestampMarkup} from './message-presentation.js?v=3.5.59';
 // State, output normalization and detection helpers.
 import {inferPhoneTypeRobust} from './phone-detection.js';
 export const KEY = 'messenger35';

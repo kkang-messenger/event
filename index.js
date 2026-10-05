@@ -1,14 +1,14 @@
-import {styleMessageTimestamps,timestampNodes,initializeThoughtCards,prepareRawThoughtCards} from './message-presentation.js?v=3.5.58';
-import {classifyMessengerPreset,createPresetGuard} from './preset-guard.js?v=3.5.58';
-import {choiceHost,placeChoicePanel,revealDirectInput,setChoiceRetryLoading} from './choice-ui.js?v=3.5.58';
-import {updateViewportLayout,watchViewportLayout,viewportBox} from './layout.js?v=3.5.58';
-import {KEY,hash,messageKey,messageRole,hasUserContent,freshMeta,derive,canSuggest,containsThought,shouldNotifyThought,inferPhoneType,inferDrinkingStart,inferDrinkingEnd,narrativeOpportunity,runtimePrompt,refreshRequestState,validScenarioTime,splitNarrativeChoices,normalizeKoreanSilence,normalizeThoughtSpacing,NARRATIVE_CONTINUE_LABEL} from './core.js?v=3.5.58';
-import {CALL_END_LABEL,CALL_END_CONTROL,splitCallChoices,resolveCallState,inferCallPhase,callChoicesFor,validCallChoiceRecord,callChoicesInstruction} from './call-choices.js?v=3.5.58';
-import {createScenarioClock,recordScenarioTimestamp,resolveScenarioTime,advanceScenarioTime,randomScenarioTime} from './scenario-clock.js?v=3.5.58';
-import {watchBackgroundControls} from './theme-controls.js?v=3.5.58';
-import {buildChoiceSuggestionPrompt,parseChoiceSuggestions,parseGeneratedChoiceSuggestions,readChoiceUserContext} from './choice-suggestions.js?v=3.5.58';
-import {choiceSourceText,resolveOutputLanguage,localizedControlChoice} from './choice-language.js?v=3.5.58';
-import {detectPhoneScreen} from './phone-detection.js?v=3.5.58';
+import {styleMessageTimestamps,timestampNodes,initializeThoughtCards,prepareRawThoughtCards} from './message-presentation.js?v=3.5.59';
+import {classifyMessengerPreset,createPresetGuard} from './preset-guard.js?v=3.5.59';
+import {choiceHost,placeChoicePanel,revealDirectInput,setChoiceRetryLoading} from './choice-ui.js?v=3.5.59';
+import {updateViewportLayout,watchViewportLayout,viewportBox} from './layout.js?v=3.5.59';
+import {KEY,hash,messageKey,messageRole,hasUserContent,freshMeta,derive,canSuggest,containsThought,shouldNotifyThought,inferPhoneType,inferDrinkingStart,inferDrinkingEnd,narrativeOpportunity,runtimePrompt,refreshRequestState,validScenarioTime,splitNarrativeChoices,normalizeKoreanSilence,normalizeThoughtSpacing,NARRATIVE_CONTINUE_LABEL} from './core.js?v=3.5.59';
+import {CALL_END_LABEL,CALL_END_CONTROL,splitCallChoices,resolveCallState,inferCallPhase,callChoicesFor,validCallChoiceRecord,callChoicesInstruction} from './call-choices.js?v=3.5.59';
+import {createScenarioClock,recordScenarioTimestamp,resolveScenarioTime,advanceScenarioTime,randomScenarioTime} from './scenario-clock.js?v=3.5.59';
+import {watchBackgroundControls} from './theme-controls.js?v=3.5.59';
+import {buildChoiceSuggestionPrompt,parseChoiceSuggestions,parseGeneratedChoiceSuggestions,readChoiceUserContext} from './choice-suggestions.js?v=3.5.59';
+import {choiceSourceText,resolveOutputLanguage,localizedControlChoice} from './choice-language.js?v=3.5.59';
+import {detectPhoneScreen} from './phone-detection.js?v=3.5.59';
 
 const ctx=()=>SillyTavern.getContext();
 const DEFAULT_SETTINGS={enabled:true,thinkingMode:'moments',timeMode:'realtime',autoDrinking:true,narrativeChoices:true,theme:'white',loadingStyle:'text',outputLanguage:'auto'};
@@ -990,7 +990,7 @@ async function processMessage(index,generatedMode,generatedTimeMode){
     const outgoingCall=phone==='call'&&(screen.direction==='outgoing'||ongoingCallState().direction==='outgoing');
     const phoneNotice={
         screenshot:['화면 캡처가 도착했습니다','캐릭터가 화면을 캡쳐해서 보냈습니다.'],
-        call:inferCallPhase(raw)==='ended'?null:outgoingCall?['통화 화면이 열렸습니다','캐릭터에게 건 전화의 통화 화면이 도착했습니다.']:['캐릭터가 전화를 걸어옵니다',''],
+        call:inferCallPhase(raw)==='ended'?null:outgoingCall?['캐릭터가 전화를 받았습니다.','']:['캐릭터가 전화를 걸어옵니다',''],
         gift:['선물이 도착했습니다','캐릭터가 선물을 보냈습니다.'],
         transfer:['송금 알림','캐릭터가 송금했습니다.'],
     }[phone];
